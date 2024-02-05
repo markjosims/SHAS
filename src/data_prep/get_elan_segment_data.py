@@ -25,7 +25,7 @@ def get_eaf_filestems(eaf_dir: str) -> Dict[str, str]:
     find all .eaf files in `eaf_dir` recursively
     return dict that maps the file stem to the full path
     """
-    eaf_list = glob(os.path.join(eaf_dir, '**.eaf'), recursive=True)
+    eaf_list = glob(os.path.join(eaf_dir, '**\\*.eaf'), recursive=True)
     filestem_dict = {
         Path(eaf_path).stem: eaf_path for eaf_path in eaf_list
     }
