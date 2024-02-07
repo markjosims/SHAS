@@ -1,15 +1,20 @@
 import pandas as pd
+from tqdm import tqdm
 import os
 from glob import glob
 from typing import Dict, List, Union
 from pathlib import Path
 from pympi import Eaf
+import shutil
 import yaml
 
 GDRIVE_METADATA = 'data/tira-metadata-gdrive.csv'
 GDRIVE_RECORDINGS_DIR = 'G:\Shared drives\Tira\Recordings'
+LOCAL_RECORDINGS_DIR = 'data/recordings/'
 CSV_OUT = 'data/tira-annotated-metadata.csv'
 YAML_OUT = 'data/tira-speech-segments.yaml'
+
+tqdm.pandas()
 
 def main():
     df = pd.read_csv(GDRIVE_METADATA)
@@ -21,7 +26,7 @@ def main():
 
     print("Getting utterance metadata...")
     eaf_filestems = get_eaf_filestems(GDRIVE_RECORDINGS_DIR)
-    annotated = df[is_annotated&not_zoom].apply(
+    annotated = df[is_annotated&not_zoom].progress_apply(
         lambda row: get_segment_metadata(row, eaf_filestems),
         axis=1
     )
@@ -30,13 +35,18 @@ def main():
 
     print("Getting timestamps for utterances...")
     utterance_timestamps = []
-    annotated['Filename'].apply(
+    annotated['Filename'].progress_apply(
         lambda fname: add_segments_to_list(eaf_filestems[fname], utterance_timestamps)
     )
     print(f"Found {len(utterance_timestamps)} utterances")
     print(f"Saving timestamps to {YAML_OUT}")
     with open(YAML_OUT, 'w') as f:
         yaml.dump(utterance_timestamps, f)
+
+    print(f"Copying files from GDrive to {LOCAL_RECORDINGS_DIR}...")
+    annotated['Filename'].progress_apply(
+        lambda fname: copy_recording_files(eaf_filestems[fname], Path(LOCAL_RECORDINGS_DIR))
+    )
 
 
 def get_segment_metadata(row: pd.Series, eaf_filestems: Dict[str, str]) -> pd.Series:
@@ -62,12 +72,12 @@ def get_segment_metadata(row: pd.Series, eaf_filestems: Dict[str, str]) -> pd.Se
 
 def add_segments_to_list(eaf_path: str, seg_list: List[Dict[str, Union[str, float]]]) -> None:
     eaf = Eaf(eaf_path)
+    media_path = get_media_path(eaf_path)
     segs = eaf.get_annotation_data_for_tier('IPA Transcription')
     for start_ms, end_ms, _ in segs:
         start_sec = start_ms/1000
         end_sec = end_ms/1000
         duration = end_sec-start_sec
-        media_path = get_media_path(eaf)
         seg_list.append({
             'duration': duration,
             'offset': start_sec,
@@ -75,16 +85,37 @@ def add_segments_to_list(eaf_path: str, seg_list: List[Dict[str, Union[str, floa
             'wav': media_path,
         })
 
-def get_media_path(eaf_obj: Eaf) -> str:
-    media_paths = [x['MEDIA_URL'] for x in eaf_obj.media_descriptors]
-    media = media_paths[0]
-    # trim prefix added by ELAN
-    # have to keep initial / on posix systems
-    # and remove on Windows
-    if os.name == 'nt':
-        return media.replace('file:///', '')
-    return media.replace('file://', '')
-    # computers why must you be so silly
+def copy_recording_files(eaf_path: str, new_dir: Path) -> None:
+    media_path = get_media_path(eaf_path)
+    eaf_name = Path(eaf_path).name
+    media_name = Path(media_path).name
+    new_eaf = str(new_dir/eaf_name)
+    new_media = str(new_dir/media_name)
+    try:
+        if not os.path.exists(new_eaf):
+            shutil.copy(eaf_path, new_eaf)
+    except FileNotFoundError as error:
+        print(error)
+        print(f"Couldn't copy eaf file {eaf_name}, skipping")
+    try:
+        if not os.path.exists(new_media):
+            shutil.copy(media_path, new_media)
+    except FileNotFoundError as error:
+        print(error)
+        print(f"Couldn't copy wav file {media_name}, skipping")
+
+def get_media_path(eaf_path: str) -> str:
+    # # NOTE: media path in eaf file may be configured for various OS
+    # # for this reason, get media path name and concatenate to eaf_path parent dir
+    # eaf_obj = Eaf(eaf_path)
+    # media_paths = [x['MEDIA_URL'] for x in eaf_obj.media_descriptors]
+    # media = media_paths[0]
+    # media_name = Path(media).name
+    # return str(Path(eaf_path).parent/media_name)
+    
+    # probably safest to just assume media path is same as eaf path
+    # with .wav extension
+    return eaf_path.replace('.eaf', '.wav')
 
 def human_time(time_ms: int) -> str:
     hours, remainder = time_ms//(3600*1000), time_ms%(3600*1000)
