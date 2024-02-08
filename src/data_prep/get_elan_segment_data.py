@@ -22,7 +22,7 @@ def main(argv: Optional[Sequence[str]] = None):
     args = parser.parse_args(argv)
 
     if args.split_path:
-        eafs = glob(os.path.join(args.split_path, '**\\*.eaf'), recursive=True)
+        eafs = glob(os.path.join(args.split_path, '*.eaf'))
         segments_list = []
         for eaf in tqdm(list(eafs)):
             add_segments_to_list(eaf, segments_list)
