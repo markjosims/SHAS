@@ -7,6 +7,8 @@ from pathlib import Path
 from pympi import Eaf
 import shutil
 import yaml
+from argparse import ArgumentParser
+import sys
 
 GDRIVE_METADATA = 'data/tira-metadata-gdrive.csv'
 GDRIVE_RECORDINGS_DIR = 'G:\Shared drives\Tira\Recordings'
@@ -136,4 +138,19 @@ def get_eaf_filestems(eaf_dir: str) -> Dict[str, str]:
     return filestem_dict
 
 if __name__ == '__main__':
+    parser = ArgumentParser("Create metadata files from directory of ELAN recordings.")
+    parser.add_argument("--split_path")
+    args = parser.parse_args(sys.argv)
+
+    if args.split_path:
+        eafs = glob(os.path.join(args.split_path, '**\\*.eaf'), recursive=True)
+        segments_list = []
+        for eaf in eafs:
+            add_segments_to_list(eaf, segments_list)
+        print(f"Found {len(segments_list)} utterances")
+        yaml_path = os.path.join(args.split_path, 'segments.yaml')
+        print(f"Saving timestamps to {yaml_path}")
+        with open(yaml_path, 'w') as f:
+            yaml.dump(segments_list, f)
+
     main()
