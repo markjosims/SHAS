@@ -145,7 +145,7 @@ if __name__ == '__main__':
     if args.split_path:
         eafs = glob(os.path.join(args.split_path, '**\\*.eaf'), recursive=True)
         segments_list = []
-        for eaf in eafs:
+        for eaf in tqdm(list(eafs)):
             add_segments_to_list(eaf, segments_list)
         print(f"Found {len(segments_list)} utterances")
         yaml_path = os.path.join(args.split_path, 'segments.yaml')
