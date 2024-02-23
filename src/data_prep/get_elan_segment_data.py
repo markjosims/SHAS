@@ -7,6 +7,8 @@ from pathlib import Path
 from pympi import Eaf
 import shutil
 import yaml
+from argparse import ArgumentParser
+from typing import Optional, Sequence
 
 GDRIVE_METADATA = 'data/tira-metadata-gdrive.csv'
 GDRIVE_RECORDINGS_DIR = 'G:\Shared drives\Tira\Recordings'
@@ -16,7 +18,21 @@ YAML_OUT = 'data/tira-speech-segments.yaml'
 
 tqdm.pandas()
 
-def main():
+def main(argv: Optional[Sequence[str]] = None):
+    args = parser.parse_args(argv)
+
+    if args.split_path:
+        eafs = glob(os.path.join(args.split_path, '*.eaf'))
+        segments_list = []
+        for eaf in tqdm(list(eafs)):
+            add_segments_to_list(eaf, segments_list)
+        print(f"Found {len(segments_list)} utterances")
+        yaml_path = os.path.join(args.split_path, 'segments.yaml')
+        print(f"Saving timestamps to {yaml_path}")
+        with open(yaml_path, 'w') as f:
+            yaml.dump(segments_list, f)
+        return 0
+
     df = pd.read_csv(GDRIVE_METADATA)
     is_annotated = df['Annotations done(ish)?'].str.contains('done') |\
         df['Annotations done(ish)?'].str.contains('yes')
@@ -47,6 +63,8 @@ def main():
     annotated['Filename'].progress_apply(
         lambda fname: copy_recording_files(eaf_filestems[fname], Path(LOCAL_RECORDINGS_DIR))
     )
+
+    return 0
 
 
 def get_segment_metadata(row: pd.Series, eaf_filestems: Dict[str, str]) -> pd.Series:
@@ -136,4 +154,7 @@ def get_eaf_filestems(eaf_dir: str) -> Dict[str, str]:
     return filestem_dict
 
 if __name__ == '__main__':
+    parser = ArgumentParser("Create metadata files from directory of ELAN recordings.")
+    parser.add_argument("--split_path")
+
     main()
